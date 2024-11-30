@@ -145,3 +145,67 @@
         (ok new-id)
     )
 )
+
+;; Transfer e-book ownership to a new author
+(define-public (transfer-ownership (ebook-id uint) (new-author principal))
+    (let
+        ((book-data (unwrap! (map-get? ebooks { ebook-id: ebook-id }) ERR-NOT-FOUND)))
+        
+        ;; Validate ownership
+        (asserts! (ebook-exists? ebook-id) ERR-NOT-FOUND)
+        (asserts! (is-eq (get author book-data) tx-sender) ERR-AUTH)
+
+        ;; Update the author field
+        (map-set ebooks
+            { ebook-id: ebook-id }
+            (merge book-data { author: new-author })
+        )
+        (ok true)
+    )
+)
+
+;; Update metadata for an existing e-book
+(define-public (update-ebook 
+    (ebook-id uint) 
+    (new-title (string-ascii 64)) 
+    (new-size uint) 
+    (new-summary (string-ascii 256)) 
+    (new-categories (list 8 (string-ascii 32))))
+    (let
+        ((book-data (unwrap! (map-get? ebooks { ebook-id: ebook-id }) ERR-NOT-FOUND)))
+        
+        ;; Validate input and ownership
+        (asserts! (ebook-exists? ebook-id) ERR-NOT-FOUND)
+        (asserts! (is-eq (get author book-data) tx-sender) ERR-AUTH)
+        (asserts! (and (> (len new-title) u0) (< (len new-title) MAX-TITLE-LENGTH)) ERR-TITLE)
+        (asserts! (and (> new-size u0) (< new-size MAX-FILE-SIZE)) ERR-SIZE)
+        (asserts! (are-categories-valid? new-categories) ERR-TITLE)
+
+        ;; Update the e-book data
+        (map-set ebooks
+            { ebook-id: ebook-id }
+            (merge book-data { 
+                title: new-title, 
+                file-size: new-size, 
+                summary: new-summary, 
+                categories: new-categories 
+            })
+        )
+        (ok true)
+    )
+)
+
+;; Delete an existing e-book
+(define-public (delete-ebook (ebook-id uint))
+    (let
+        ((book-data (unwrap! (map-get? ebooks { ebook-id: ebook-id }) ERR-NOT-FOUND)))
+        
+        ;; Validate ownership
+        (asserts! (ebook-exists? ebook-id) ERR-NOT-FOUND)
+        (asserts! (is-eq (get author book-data) tx-sender) ERR-AUTH)
+
+        ;; Remove the e-book from storage
+        (map-delete ebooks { ebook-id: ebook-id })
+        (ok true)
+    )
+)
