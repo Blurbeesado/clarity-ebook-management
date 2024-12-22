@@ -143,6 +143,46 @@
     )
 )
 
+;; Upload a new e-book to the decentralized library
+(define-public (upload-ebook 
+    (title (string-ascii 64)) 
+    (file-size uint) 
+    (summary (string-ascii 256)) 
+    (categories (list 8 (string-ascii 32))))
+    (let
+        ((new-id (+ (var-get total-ebooks) u1)))
+
+        ;; Validate inputs
+        (asserts! (and (> (len title) u0) (< (len title) MAX-TITLE-LENGTH)) ERR-TITLE)
+        (asserts! (and (> file-size u0) (< file-size MAX-FILE-SIZE)) ERR-SIZE)
+        (asserts! (and (> (len summary) u0) (< (len summary) MAX-SUMMARY-LENGTH)) ERR-TITLE)
+        (asserts! (are-categories-valid? categories) ERR-TITLE)
+
+        ;; Save e-book metadata
+        (map-insert ebooks
+            { ebook-id: new-id }
+            {
+                title: title,
+                author: tx-sender,
+                file-size: file-size,
+                upload-time: block-height,
+                summary: summary,
+                categories: categories
+            }
+        )
+
+        ;; Grant access to uploader
+        (map-insert access-rights
+            { ebook-id: new-id, user: tx-sender }
+            { can-access: true }
+        )
+
+        ;; Increment total e-book count
+        (var-set total-ebooks new-id)
+        (ok new-id)
+    )
+)
+
 ;; Transfer e-book ownership to another user
 (define-public (transfer-ownership (ebook-id uint) (new-author principal))
     (let
@@ -297,6 +337,7 @@
     )
 )
 
+
 (define-public (set-upload-time (ebook-id uint) (upload-time uint))
     (begin
         ;; Validate ebook-id existence
@@ -382,44 +423,6 @@
     (ok (is-eq tx-sender ADMIN))
 )
 
-(define-public (upload-ebook 
-    (title (string-ascii 64)) 
-    (file-size uint) 
-    (summary (string-ascii 256)) 
-    (categories (list 8 (string-ascii 32))))
-    (let
-        ((new-id (+ (var-get total-ebooks) u1)))
-
-        ;; Validate inputs
-        (asserts! (and (> (len title) u0) (< (len title) MAX-TITLE-LENGTH)) ERR-TITLE)
-        (asserts! (and (> file-size u0) (< file-size MAX-FILE-SIZE)) ERR-SIZE)
-        (asserts! (and (> (len summary) u0) (< (len summary) MAX-SUMMARY-LENGTH)) ERR-TITLE)
-        (asserts! (are-categories-valid? categories) ERR-TITLE)
-
-        ;; Save e-book metadata
-        (map-insert ebooks
-            { ebook-id: new-id }
-            {
-                title: title,
-                author: tx-sender,
-                file-size: file-size,
-                upload-time: block-height,
-                summary: summary,
-                categories: categories
-            }
-        )
-
-        ;; Grant access to uploader
-        (map-insert access-rights
-            { ebook-id: new-id, user: tx-sender }
-            { can-access: true }
-        )
-
-        ;; Increment total e-book count
-        (var-set total-ebooks new-id)
-        (ok new-id)
-    )
-)
 
 (define-public (reset-read-count (ebook-id uint))
     (let
