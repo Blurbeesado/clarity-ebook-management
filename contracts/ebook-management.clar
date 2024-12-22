@@ -143,46 +143,6 @@
     )
 )
 
-;; Upload a new e-book to the decentralized library
-(define-public (upload-ebook 
-    (title (string-ascii 64)) 
-    (file-size uint) 
-    (summary (string-ascii 256)) 
-    (categories (list 8 (string-ascii 32))))
-    (let
-        ((new-id (+ (var-get total-ebooks) u1)))
-        
-        ;; Validate input
-        (asserts! (and (> (len title) u0) (< (len title) MAX-TITLE-LENGTH)) ERR-TITLE)
-        (asserts! (and (> file-size u0) (< file-size MAX-FILE-SIZE)) ERR-SIZE)
-        (asserts! (and (> (len summary) u0) (< (len summary) MAX-SUMMARY-LENGTH)) ERR-TITLE)
-        (asserts! (are-categories-valid? categories) ERR-TITLE)
-
-        ;; Save e-book metadata
-        (map-insert ebooks
-            { ebook-id: new-id }
-            {
-                title: title,
-                author: tx-sender,
-                file-size: file-size,
-                upload-time: block-height,
-                summary: summary,
-                categories: categories
-            }
-        )
-
-        ;; Grant access to uploader
-        (map-insert access-rights
-            { ebook-id: new-id, user: tx-sender }
-            { can-access: true }
-        )
-
-        ;; Increment total e-book count
-        (var-set total-ebooks new-id)
-        (ok new-id)
-    )
-)
-
 ;; Transfer e-book ownership to another user
 (define-public (transfer-ownership (ebook-id uint) (new-author principal))
     (let
@@ -267,6 +227,13 @@
     )
 )
 
+
+
+
+
+
+
+
 ;; Verify if a user has access to an e-book.
 (define-public (has-access? (ebook-id uint) (user principal))
     (let
@@ -330,7 +297,6 @@
     )
 )
 
-
 (define-public (set-upload-time (ebook-id uint) (upload-time uint))
     (begin
         ;; Validate ebook-id existence
@@ -376,9 +342,146 @@
     )
 )
 
+;; Update metadata of an existing e-book (with validated summary)
+(define-public (set-ebook-summary (ebook-id uint) (new-summary (string-ascii 256)))
+    (let
+        ((book-data (unwrap! (map-get? ebooks { ebook-id: ebook-id }) ERR-NOT-FOUND)))
+        
+        ;; Validate ownership and input
+        (asserts! (ebook-exists? ebook-id) ERR-NOT-FOUND)
+        (asserts! (is-eq (get author book-data) tx-sender) ERR-AUTH)
+        (asserts! (and (> (len new-summary) u0) (< (len new-summary) MAX-SUMMARY-LENGTH)) ERR-SIZE)
 
+        ;; Update the summary
+        (map-set ebooks
+            { ebook-id: ebook-id }
+            (merge book-data { summary: new-summary })
+        )
+        (ok true)
+    )
+)
 
+;; Fetch the owner of an e-book
+(define-public (get-ebook-owner (ebook-id uint))
+    (match (map-get? ebooks { ebook-id: ebook-id })
+        book-data (ok (get author book-data))
+        ERR-NOT-FOUND
+    )
+)
 
+;; Check if the caller is the owner of an e-book
+(define-public (is-owner (ebook-id uint))
+    (let
+        ((book-data (unwrap! (map-get? ebooks { ebook-id: ebook-id }) ERR-NOT-FOUND)))
+        (ok (is-eq (get author book-data) tx-sender))
+    )
+)
 
+;; Check if the caller is the admin
+(define-public (check-admin-access)
+    (ok (is-eq tx-sender ADMIN))
+)
 
+(define-public (upload-ebook 
+    (title (string-ascii 64)) 
+    (file-size uint) 
+    (summary (string-ascii 256)) 
+    (categories (list 8 (string-ascii 32))))
+    (let
+        ((new-id (+ (var-get total-ebooks) u1)))
+
+        ;; Validate inputs
+        (asserts! (and (> (len title) u0) (< (len title) MAX-TITLE-LENGTH)) ERR-TITLE)
+        (asserts! (and (> file-size u0) (< file-size MAX-FILE-SIZE)) ERR-SIZE)
+        (asserts! (and (> (len summary) u0) (< (len summary) MAX-SUMMARY-LENGTH)) ERR-TITLE)
+        (asserts! (are-categories-valid? categories) ERR-TITLE)
+
+        ;; Save e-book metadata
+        (map-insert ebooks
+            { ebook-id: new-id }
+            {
+                title: title,
+                author: tx-sender,
+                file-size: file-size,
+                upload-time: block-height,
+                summary: summary,
+                categories: categories
+            }
+        )
+
+        ;; Grant access to uploader
+        (map-insert access-rights
+            { ebook-id: new-id, user: tx-sender }
+            { can-access: true }
+        )
+
+        ;; Increment total e-book count
+        (var-set total-ebooks new-id)
+        (ok new-id)
+    )
+)
+
+(define-public (reset-read-count (ebook-id uint))
+    (let
+        ((book-data (unwrap! (map-get? ebooks { ebook-id: ebook-id }) ERR-NOT-FOUND)))
+        ;; Ensure that the e-book exists and the caller is authorized (if needed)
+        (asserts! (ebook-exists? ebook-id) ERR-NOT-FOUND)
+        ;; Proceed to reset the read count if the e-book is valid
+        (map-set read-counts
+            { ebook-id: ebook-id }
+            { read-count: u0 }  ;; Reset read count to zero
+        )
+        (ok true)
+    )
+)
+
+(define-public (set-ebook-file-size (ebook-id uint) (new-file-size uint))
+    (begin
+        ;; Validate ebook-id existence
+        (asserts! (ebook-exists? ebook-id) ERR-NOT-FOUND)
+        
+        ;; Ensure new file size is valid (non-zero)
+        (asserts! (> new-file-size u0) ERR-SIZE)
+
+        ;; Fetch the existing e-book data and update file size
+        (let ((book-data (unwrap! (map-get? ebooks { ebook-id: ebook-id }) ERR-NOT-FOUND)))
+            (map-set ebooks
+                { ebook-id: ebook-id }
+                (merge book-data { file-size: new-file-size })
+            )
+        )
+        (ok true)
+    )
+)
+
+;; Set categories for an e-book
+(define-public (set-ebook-categories (ebook-id uint) (new-categories (list 8 (string-ascii 32))))
+    (begin
+        (asserts! (ebook-exists? ebook-id) ERR-NOT-FOUND)
+        (asserts! (are-categories-valid? new-categories) ERR-TITLE)
+        (let ((book-data (unwrap! (map-get? ebooks { ebook-id: ebook-id }) ERR-NOT-FOUND)))
+            (map-set ebooks
+                { ebook-id: ebook-id }
+                (merge book-data { categories: new-categories })
+            )
+        )
+        (ok true)
+    )
+)
+
+;; Check if an e-book is available for access to the caller
+(define-public (check-access (ebook-id uint))
+    (let
+        ((access-right (default-to { can-access: false }
+            (map-get? access-rights { ebook-id: ebook-id, user: tx-sender }))))
+        (ok (get can-access access-right))
+    )
+)
+
+;; Get if a user has access to an e-book
+(define-public (get-access-rights (ebook-id uint) (user principal))
+    (let ((access-data (unwrap! (map-get? access-rights { ebook-id: ebook-id, user: user }) ERR-NOT-FOUND)))
+        (ok (get can-access access-data))
+    )
+)
 
