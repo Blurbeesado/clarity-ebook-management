@@ -267,13 +267,6 @@
     )
 )
 
-
-
-
-
-
-
-
 ;; Verify if a user has access to an e-book.
 (define-public (has-access? (ebook-id uint) (user principal))
     (let
@@ -423,7 +416,6 @@
     (ok (is-eq tx-sender ADMIN))
 )
 
-
 (define-public (reset-read-count (ebook-id uint))
     (let
         ((book-data (unwrap! (map-get? ebooks { ebook-id: ebook-id }) ERR-NOT-FOUND)))
@@ -487,4 +479,3 @@
         (ok (get can-access access-data))
     )
 )
-
