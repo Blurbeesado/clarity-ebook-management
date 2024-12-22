@@ -266,3 +266,119 @@
         (ok true)
     )
 )
+
+;; Verify if a user has access to an e-book.
+(define-public (has-access? (ebook-id uint) (user principal))
+    (let
+        ((access-right (default-to { can-access: false }
+            (map-get? access-rights { ebook-id: ebook-id, user: user }))))
+        (ok (get can-access access-right))
+    )
+)
+
+(define-public (grant-access (ebook-id uint) (user principal))
+    (begin
+        ;; Validate input: Check if the e-book exists
+        (asserts! (ebook-exists? ebook-id) ERR-NOT-FOUND)
+        
+        ;; Ensure that the caller (tx-sender) is the author of the e-book
+        (asserts! (is-eq tx-sender (get author (unwrap! (map-get? ebooks { ebook-id: ebook-id }) ERR-NOT-FOUND))) ERR-AUTH)
+
+        ;; Additional validation for user principal:
+        ;; Ensure that the user principal is not the contract itself (to prevent self-access)
+        (asserts! (not (is-eq user (as-contract tx-sender))) ERR-RECIPIENT)
+        
+        ;; Update access rights for the user
+        (map-insert access-rights
+            { ebook-id: ebook-id, user: user }
+            { can-access: true }
+        )
+        
+        ;; Return success
+        (ok true)
+    )
+)
+
+(define-public (revoke-access (ebook-id uint) (user principal))
+    (begin
+        ;; Validate that the e-book exists
+        (asserts! (ebook-exists? ebook-id) ERR-NOT-FOUND)
+
+        ;; Validate that the caller is the author of the e-book
+        (asserts! (is-author? ebook-id tx-sender) ERR-AUTH)
+
+        ;; Additional input validation: Ensure user is not the contract itself
+        (asserts! (not (is-eq user (as-contract tx-sender))) ERR-RECIPIENT)
+
+        ;; Additional validation: Check if the user actually has existing access
+        (asserts! 
+            (is-some 
+                (map-get? access-rights { ebook-id: ebook-id, user: user })
+            ) 
+            ERR-ACCESS
+        )
+
+        ;; Revoke access
+        (map-delete access-rights { ebook-id: ebook-id, user: user })
+        (ok true)
+    )
+)
+
+(define-public (get-ebook-author (ebook-id uint))
+    (let ((book-data (unwrap! (map-get? ebooks { ebook-id: ebook-id }) ERR-NOT-FOUND)))
+        (ok (get author book-data))
+    )
+)
+
+
+(define-public (set-upload-time (ebook-id uint) (upload-time uint))
+    (begin
+        ;; Validate ebook-id existence
+        (asserts! (ebook-exists? ebook-id) ERR-NOT-FOUND)
+
+        ;; Ensure upload-time is valid (non-zero block height for example)
+        (asserts! (> upload-time u0) ERR-ACCESS)
+
+        ;; Update upload time in the e-book metadata
+        (map-set ebooks
+            { ebook-id: ebook-id }
+            (merge (unwrap! (map-get? ebooks { ebook-id: ebook-id }) ERR-NOT-FOUND)
+                   { upload-time: upload-time })
+        )
+
+        (ok true)
+    )
+)
+
+(define-public (donate-access (ebook-id uint) (recipient principal))
+    (begin
+        ;; Validate e-book existence
+        (asserts! (ebook-exists? ebook-id) ERR-NOT-FOUND)
+
+        ;; Ensure the caller owns the e-book
+        (asserts! (is-author? ebook-id tx-sender) ERR-AUTH)
+
+        ;; Validate recipient (ensure the principal is not null and not the sender)
+        (asserts! (not (is-eq recipient tx-sender)) ERR-RECIPIENT)
+
+        ;; Grant access to the recipient
+        (map-set access-rights
+            { ebook-id: ebook-id, user: recipient }
+            { can-access: true }
+        )
+        (ok true)
+    )
+)
+
+(define-public (get-upload-time (ebook-id uint))
+    (let ((book-data (unwrap! (map-get? ebooks { ebook-id: ebook-id }) ERR-NOT-FOUND)))
+        (ok (get upload-time book-data))
+    )
+)
+
+
+
+
+
+
+
